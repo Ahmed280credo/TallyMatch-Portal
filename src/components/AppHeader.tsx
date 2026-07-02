@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useCurrentOrg } from "@/hooks/useCurrentOrg";
 import { Button } from "@/components/ui/button";
-import { FileText, LogOut, ScrollText, LayoutDashboard } from "lucide-react";
+import { FileText, LogOut, ScrollText, LayoutDashboard, FolderOpen } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -42,6 +42,10 @@ export default function AppHeader() {
             <NavLink to="/audit-log" className={navLinkClass}>
               <ScrollText className="h-4 w-4" />
               Activity Logs
+            </NavLink>
+            <NavLink to="/documents" className={navLinkClass}>
+              <FolderOpen className="h-4 w-4" />
+              Documents
             </NavLink>
           </nav>
         </div>

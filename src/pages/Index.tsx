@@ -11,6 +11,7 @@ const Index = () => {
   const { currentOrg, loading: orgLoading } = useCurrentOrg();
   const navigate = useNavigate();
   const [refreshKey, setRefreshKey] = useState(0);
+  const [pendingFiles, setPendingFiles] = useState<string[]>([]);
 
   // 1. Handle Navigation separately
   useEffect(() => {
@@ -52,12 +53,23 @@ const Index = () => {
           <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
             {/* The Sidebar (Upload) */}
             <aside>
-              <UploadPanel onUploadComplete={() => setRefreshKey((k) => k + 1)} />
+              <UploadPanel
+                onUploadComplete={(names) => {
+                  setPendingFiles((prev) => [...prev, ...names]);
+                  setRefreshKey((k) => k + 1);
+                }}
+              />
             </aside>
-            
+
             {/* The Main Content (Table) */}
             <section>
-              <InvoiceTable refreshKey={refreshKey} />
+              <InvoiceTable
+                refreshKey={refreshKey}
+                pendingFiles={pendingFiles}
+                onFilesSettled={(settled) =>
+                  setPendingFiles((prev) => prev.filter((n) => !settled.includes(n)))
+                }
+              />
             </section>
           </div>
         )}

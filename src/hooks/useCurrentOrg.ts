@@ -33,9 +33,6 @@ export function useCurrentOrg() {
         .select("role, organizations:org_id(id, name, slug)")
         .eq("user_id", user.id);
 
-      console.log("useCurrentOrg - user.id:", user.id);
-      console.log("useCurrentOrg - supabase response:", JSON.stringify({ data, error }, null, 2));
-
       if (error || !data) {
         setOrgs([]);
         setCurrentOrg(null);

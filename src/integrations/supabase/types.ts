@@ -7,8 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
@@ -20,8 +18,11 @@ export type Database = {
           currency: string | null
           event: string
           id: string
+          invoice_id: string | null
           invoice_number: string | null
-          org_id: any
+          metadata: Json | null
+          notes: string | null
+          org_id: string
           processed_at: string | null
           source: string | null
           status: string | null
@@ -33,7 +34,10 @@ export type Database = {
           currency?: string | null
           event: string
           id?: string
+          invoice_id?: string | null
           invoice_number?: string | null
+          metadata?: Json | null
+          notes?: string | null
           org_id: string
           processed_at?: string | null
           source?: string | null
@@ -46,7 +50,10 @@ export type Database = {
           currency?: string | null
           event?: string
           id?: string
+          invoice_id?: string | null
           invoice_number?: string | null
+          metadata?: Json | null
+          notes?: string | null
           org_id?: string
           processed_at?: string | null
           source?: string | null
@@ -58,40 +65,87 @@ export type Database = {
       }
       invoices: {
         Row: {
-          due_date: import("react/jsx-runtime").JSX.Element
-          invoice_date: ReactNode
-          invoice_date: import("react/jsx-runtime").JSX.Element
-          currency: string
-          total_amount: import("react/jsx-runtime").JSX.Element
-          vendor_name: import("react/jsx-runtime").JSX.Element
-          file_name: string
-          file_size: number
-          file_url: string | null
           id: string
           org_id: string
+          user_id: string | null
+          file_name: string | null
+          file_size: number | null
+          file_url: string | null
+          uploaded_at: string | null
           status: string
-          uploaded_at: string
-          user_id: string
+          created_at: string
+          updated_at: string | null
+          vendor_name: string | null
+          vendor_ntn: string | null
+          invoice_number: string | null
+          po_number: string | null
+          grn_number: string | null
+          invoice_date: string | null
+          due_date: string | null
+          subtotal: number | null
+          tax_amount: number | null
+          total_amount: number | null
+          currency: string | null
+          payment_terms: string | null
+          line_items: Json | null
+          fbr_status: string | null
+          match_status: string | null
+          match_result: Json | null
+          source_file_name: string | null
         }
         Insert: {
-          file_name: string
-          file_size: number
-          file_url?: string | null
           id?: string
           org_id: string
+          user_id?: string | null
+          file_name?: string | null
+          file_size?: number | null
+          file_url?: string | null
           status?: string
-          uploaded_at?: string
-          user_id: string
+          uploaded_at?: string | null
+          vendor_name?: string | null
+          vendor_ntn?: string | null
+          invoice_number?: string | null
+          po_number?: string | null
+          grn_number?: string | null
+          invoice_date?: string | null
+          due_date?: string | null
+          subtotal?: number | null
+          tax_amount?: number | null
+          total_amount?: number | null
+          currency?: string | null
+          payment_terms?: string | null
+          line_items?: Json | null
+          fbr_status?: string | null
+          match_status?: string | null
+          match_result?: Json | null
+          source_file_name?: string | null
         }
         Update: {
-          file_name?: string
-          file_size?: number
-          file_url?: string | null
           id?: string
           org_id?: string
+          user_id?: string | null
+          file_name?: string | null
+          file_size?: number | null
+          file_url?: string | null
           status?: string
-          uploaded_at?: string
-          user_id?: string
+          updated_at?: string | null
+          vendor_name?: string | null
+          vendor_ntn?: string | null
+          invoice_number?: string | null
+          po_number?: string | null
+          grn_number?: string | null
+          invoice_date?: string | null
+          due_date?: string | null
+          subtotal?: number | null
+          tax_amount?: number | null
+          total_amount?: number | null
+          currency?: string | null
+          payment_terms?: string | null
+          line_items?: Json | null
+          fbr_status?: string | null
+          match_status?: string | null
+          match_result?: Json | null
+          source_file_name?: string | null
         }
         Relationships: []
       }
@@ -178,6 +232,93 @@ export type Database = {
         }
         Relationships: []
       }
+      purchase_orders: {
+        Row: {
+          id: string
+          org_id: string
+          po_number: string
+          vendor_name: string | null
+          total_amount: number | null
+          currency: string | null
+          line_items: Json | null
+          file_url: string | null
+          file_name: string | null
+          uploaded_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          po_number: string
+          vendor_name?: string | null
+          total_amount?: number | null
+          currency?: string | null
+          line_items?: Json | null
+          file_url?: string | null
+          file_name?: string | null
+          uploaded_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          po_number?: string
+          vendor_name?: string | null
+          total_amount?: number | null
+          currency?: string | null
+          line_items?: Json | null
+          file_url?: string | null
+          file_name?: string | null
+          uploaded_by?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      goods_receipt_notes: {
+        Row: {
+          id: string
+          org_id: string
+          grn_number: string
+          po_number: string | null
+          vendor_name: string | null
+          total_received_amount: number | null
+          line_items: Json | null
+          received_at: string | null
+          file_url: string | null
+          file_name: string | null
+          uploaded_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          grn_number: string
+          po_number?: string | null
+          vendor_name?: string | null
+          total_received_amount?: number | null
+          line_items?: Json | null
+          received_at?: string | null
+          file_url?: string | null
+          file_name?: string | null
+          uploaded_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          grn_number?: string
+          po_number?: string | null
+          vendor_name?: string | null
+          total_received_amount?: number | null
+          line_items?: Json | null
+          received_at?: string | null
+          file_url?: string | null
+          file_name?: string | null
+          uploaded_by?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -185,11 +326,7 @@ export type Database = {
     Functions: {
       get_user_org_ids: { Args: { _user_id: string }; Returns: string[] }
       has_org_role: {
-        Args: {
-          _org_id: string
-          _role: Database["public"]["Enums"]["app_role"]
-          _user_id: string
-        }
+        Args: { _org_id: string; _role: Database["public"]["Enums"]["app_role"]; _user_id: string }
         Returns: boolean
       }
       is_org_member: {
@@ -207,7 +344,6 @@ export type Database = {
 }
 
 type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
-
 type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
 export type Tables<
@@ -220,113 +356,66 @@ export type Tables<
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
     : never = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
+> = DefaultSchemaTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
   ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
-      Row: infer R
-    }
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends { Row: infer R }
     ? R
     : never
-  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])
-    ? (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
-        Row: infer R
-      }
-      ? R
-      : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+  ? (DefaultSchema["Tables"] & DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends { Row: infer R }
+    ? R
     : never
+  : never
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
+  TableName extends DefaultSchemaTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Insert: infer I
-    }
+> = DefaultSchemaTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends { Insert: infer I }
     ? I
     : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Insert: infer I
-      }
-      ? I
-      : never
+  ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends { Insert: infer I }
+    ? I
     : never
+  : never
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
+  TableName extends DefaultSchemaTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Update: infer U
-    }
+> = DefaultSchemaTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends { Update: infer U }
     ? U
     : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Update: infer U
-      }
-      ? U
-      : never
+  ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends { Update: infer U }
+    ? U
     : never
+  : never
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
+  EnumName extends DefaultSchemaEnumNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
     : never = never,
-> = DefaultSchemaEnumNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
+> = DefaultSchemaEnumNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
   ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
-    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
-    : never
-
-export type CompositeTypes<
-  PublicCompositeTypeNameOrOptions extends
-    | keyof DefaultSchema["CompositeTypes"]
-    | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
-> = PublicCompositeTypeNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
-  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
-    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
-    : never
+  ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+  : never
 
 export const Constants = {
   public: {
-    Enums: {
-      app_role: ["owner", "admin", "member"],
-    },
+    Enums: { app_role: ["owner", "admin", "member"] },
   },
 } as const

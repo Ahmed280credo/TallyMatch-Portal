@@ -10,20 +10,9 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { ChevronDown, ChevronRight, Clock } from "lucide-react";
+import type { Tables } from "@/integrations/supabase/types";
 
-interface AuditRow {
-  id: string;
-  org_id: string;
-  invoice_number: string | null;
-  vendor_name: string | null;
-  event: string;
-  status: string | null;
-  total_amount: number | null;
-  currency: string | null;
-  processed_at: string | null;
-  source: string | null;
-  created_at: string;
-}
+type AuditRow = Tables<"invoice_audit_log">;
 
 interface GroupedInvoice {
   invoice_number: string;
@@ -35,6 +24,8 @@ interface GroupedInvoice {
 }
 
 const eventStyles: Record<string, string> = {
+  MATCH_FAILED: "bg-red-200",
+  APPROVED: "bg-blue-200",
   PROCESSED: "bg-green-100 text-green-800 border-green-200",
   DUPLICATE_DETECTED: "bg-yellow-100 text-yellow-800 border-yellow-200",
   EXTRACTION_FAILED: "bg-red-100 text-red-800 border-red-200",
@@ -44,18 +35,30 @@ const eventStyles: Record<string, string> = {
 const statusStyles: Record<string, string> = {
   processed: "bg-green-100 text-green-800 border-green-200",
   success: "bg-green-100 text-green-800 border-green-200",
-  flagged: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  failed: "bg-red-100 text-red-800 border-red-200",
   approved: "bg-blue-100 text-blue-800 border-blue-200",
   paid: "bg-purple-100 text-purple-800 border-purple-200",
+  mismatch: "bg-red-100 text-red-800 border-red-200",
+  failed: "bg-red-100 text-red-800 border-red-200",
+  pending: "bg-amber-100 text-amber-800 border-amber-200",
+  flagged: "bg-yellow-100 text-yellow-800 border-yellow-200",
+  duplicate: "bg-yellow-100 text-yellow-800 border-yellow-200",
+  pending_match: "bg-orange-100 text-orange-800 border-orange-200",
+  pending_review: "bg-amber-100 text-amber-800 border-amber-200",
+  extracted: "bg-sky-100 text-sky-800 border-sky-200",
 };
 
 const timelineDotMap: Record<string, string> = {
+  MATCH_FAILED: "bg-red-500",
+  APPROVED: "bg-blue-500",
   PROCESSED: "bg-green-500",
   DUPLICATE_DETECTED: "bg-yellow-500",
   EXTRACTION_FAILED: "bg-red-500",
   status_change_paid: "bg-purple-500",
   status_change_approved: "bg-blue-500",
+  status_change_mismatch: "bg-red-400",
+  status_change_pending: "bg-amber-400",
+  status_change_pending_match: "bg-orange-400",
+  status_change_pending_review: "bg-amber-400",
 };
 
 function getDotColor(row: AuditRow) {
@@ -112,9 +115,9 @@ export default function AuditLog() {
 
   useEffect(() => {
     if (!currentOrg) return;
-    (async () => {
+    const fetchLogs = async () => {
       setLoading(true);
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("invoice_audit_log")
         .select("*")
         .eq("org_id", currentOrg.id)
@@ -123,7 +126,21 @@ export default function AuditLog() {
 
       if (!error && data) setRows(data as AuditRow[]);
       setLoading(false);
-    })();
+    };
+
+    fetchLogs();
+
+    const channel = supabase
+      .channel("audit-log-realtime")
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "invoice_audit_log",
+        filter: `org_id=eq.${currentOrg.id}`,
+      }, () => fetchLogs())
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [currentOrg]);
 
   const toggleExpand = (invoiceNumber: string) => {
