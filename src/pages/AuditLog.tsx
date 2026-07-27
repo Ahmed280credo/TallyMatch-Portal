@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useCurrentOrg } from "@/hooks/useCurrentOrg";
@@ -202,10 +202,9 @@ export default function AuditLog() {
                   {groups.map((group) => {
                     const isOpen = expanded.has(group.invoice_number);
                     return (
-                      <>
+                      <Fragment key={group.invoice_number}>
                         {/* ── Main grouped row ── */}
                         <TableRow
-                          key={group.invoice_number}
                           className="cursor-pointer hover:bg-muted/50 transition-colors"
                           onClick={() => toggleExpand(group.invoice_number)}
                         >
@@ -322,7 +321,7 @@ export default function AuditLog() {
                             </TableCell>
                           </TableRow>
                         )}
-                      </>
+                      </Fragment>
                     );
                   })}
                 </TableBody>

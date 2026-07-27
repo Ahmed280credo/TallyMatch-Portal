@@ -6,7 +6,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useEffect } from "react";
-import { FileText } from "lucide-react";
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -61,10 +60,8 @@ const Auth = () => {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-lg bg-primary">
-            <FileText className="h-6 w-6 text-primary-foreground" />
-          </div>
-          <CardTitle className="text-2xl">Finflow</CardTitle>
+          <img src="/tallymatch-icon-final.png" alt="TallyMatch" className="mx-auto mb-2 h-16 w-16 rounded-xl object-contain" />
+          <CardTitle className="text-2xl">TallyMatch</CardTitle>
           <CardDescription>
             {isLogin ? "Sign in to your account" : "Create a new account"}
           </CardDescription>
