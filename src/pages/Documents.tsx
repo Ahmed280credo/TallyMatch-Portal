@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useCurrentOrg } from "@/hooks/useCurrentOrg";
 import { supabase } from "@/integrations/supabase/client";
+import { apiUrl } from "@/lib/api";
 import AppHeader from "@/components/AppHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -255,7 +256,7 @@ export default function Documents() {
     try {
       const form = new FormData();
       form.append("file", poCsvFile);
-      const res = await fetch("/api/v1/import/po", {
+      const res = await fetch(apiUrl("/api/v1/import/po"), {
         method: "POST",
         headers: { Authorization: `Bearer ${session.access_token}`, "x-org-id": currentOrg.id },
         body: form,
@@ -282,7 +283,7 @@ export default function Documents() {
     try {
       const form = new FormData();
       form.append("file", grnCsvFile);
-      const res = await fetch("/api/v1/import/grn", {
+      const res = await fetch(apiUrl("/api/v1/import/grn"), {
         method: "POST",
         headers: { Authorization: `Bearer ${session.access_token}`, "x-org-id": currentOrg.id },
         body: form,

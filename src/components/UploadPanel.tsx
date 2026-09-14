@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useCurrentOrg } from "@/hooks/useCurrentOrg";
 import { useAuth } from "@/hooks/useAuth";
+import { apiUrl } from "@/lib/api";
 import ColumnMappingModal, {
   type PreviewData,
   type SavedMappingPreset
@@ -101,7 +102,7 @@ export default function UploadPanel({ onUploadComplete }: UploadPanelProps) {
   useEffect(() => {
     if (!currentOrg || !session?.access_token) return;
 
-    fetch("/api/v1/invoices/bulk-import/saved-mappings", {
+    fetch(apiUrl("/api/v1/invoices/bulk-import/saved-mappings"), {
       headers: {
         "x-org-id": currentOrg.id,
         Authorization: `Bearer ${session.access_token}`
@@ -172,7 +173,7 @@ export default function UploadPanel({ onUploadComplete }: UploadPanelProps) {
       if (user?.id) formData.append("uploaded_by_user_id", user.id);
 
       try {
-        const res = await fetch("/api/v1/invoices/upload", {
+        const res = await fetch(apiUrl("/api/v1/invoices/upload"), {
           method: "POST",
           headers: {
             "x-org-id": currentOrg.id,
@@ -261,7 +262,7 @@ export default function UploadPanel({ onUploadComplete }: UploadPanelProps) {
     if (user?.id) formData.append("uploaded_by_user_id", user.id);
 
     try {
-      const res = await fetch("/api/v1/invoices/bulk-import", {
+      const res = await fetch(apiUrl("/api/v1/invoices/bulk-import"), {
         method: "POST",
         headers: {
           "x-org-id": currentOrg.id,
@@ -297,7 +298,7 @@ export default function UploadPanel({ onUploadComplete }: UploadPanelProps) {
     if (user?.id) formData.append("uploaded_by_user_id", user.id);
 
     try {
-      const res = await fetch("/api/v1/invoices/bulk-import/preview", {
+      const res = await fetch(apiUrl("/api/v1/invoices/bulk-import/preview"), {
         method: "POST",
         headers: {
           "x-org-id": currentOrg.id,
@@ -335,7 +336,7 @@ export default function UploadPanel({ onUploadComplete }: UploadPanelProps) {
 
     setConfirmingCsv(true);
     try {
-      const res = await fetch("/api/v1/invoices/bulk-import/confirm", {
+      const res = await fetch(apiUrl("/api/v1/invoices/bulk-import/confirm"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -362,7 +363,7 @@ export default function UploadPanel({ onUploadComplete }: UploadPanelProps) {
 
         // Refresh saved presets if a new preset was saved
         if (savePresetName) {
-          fetch("/api/v1/invoices/bulk-import/saved-mappings", {
+          fetch(apiUrl("/api/v1/invoices/bulk-import/saved-mappings"), {
             headers: {
               "x-org-id": currentOrg.id,
               Authorization: `Bearer ${session.access_token}`

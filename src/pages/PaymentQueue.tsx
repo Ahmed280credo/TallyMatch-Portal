@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useCurrentOrg } from "@/hooks/useCurrentOrg";
 import { supabase } from "@/integrations/supabase/client";
+import { apiUrl } from "@/lib/api";
 import AppHeader from "@/components/AppHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -134,7 +135,7 @@ export default function PaymentQueue() {
       });
       if (vendorFilter.trim()) params.set("vendor_name", vendorFilter.trim());
 
-      const res = await fetch(`/api/v1/invoices/payment-queue?${params.toString()}`, {
+      const res = await fetch(apiUrl(`/api/v1/invoices/payment-queue?${params.toString()}`), {
         headers: authHeaders(),
       });
       const body = await res.json().catch(() => ({}));
@@ -184,7 +185,7 @@ export default function PaymentQueue() {
     if (!currentOrg || selectedIds.size === 0) return;
     setCreatingRun(true);
     try {
-      const res = await fetch("/api/v1/invoices/payment-run", {
+      const res = await fetch(apiUrl("/api/v1/invoices/payment-run"), {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ invoice_ids: Array.from(selectedIds) }),
@@ -244,7 +245,7 @@ export default function PaymentQueue() {
     if (!currentOrg || !session?.access_token) return;
     setRunsLoading(true);
     try {
-      const res = await fetch("/api/v1/invoices/payment-runs?page=1&page_size=50", {
+      const res = await fetch(apiUrl("/api/v1/invoices/payment-runs?page=1&page_size=50"), {
         headers: authHeaders(),
       });
       const body = await res.json().catch(() => ({}));
@@ -269,7 +270,7 @@ export default function PaymentQueue() {
     setDetailRun(run);
     setRunInvoicesLoading(true);
     try {
-      const res = await fetch(`/api/v1/invoices/payment-runs/${run.id}/invoices`, {
+      const res = await fetch(apiUrl(`/api/v1/invoices/payment-runs/${run.id}/invoices`), {
         headers: authHeaders(),
       });
       const body = await res.json().catch(() => ({}));
@@ -290,7 +291,7 @@ export default function PaymentQueue() {
   const handleDownloadRunCsv = async (runId: string) => {
     setDownloadingRunId(runId);
     try {
-      const res = await fetch(`/api/v1/invoices/payment-runs/${runId}/csv`, {
+      const res = await fetch(apiUrl(`/api/v1/invoices/payment-runs/${runId}/csv`), {
         headers: authHeaders(),
       });
       if (!res.ok) {
@@ -765,7 +766,7 @@ function MarkPaidDialog({ invoice, onClose, authHeaders, onSuccess }: MarkPaidDi
     formData.append("amount_paid", amountPaid);
 
     try {
-      const res = await fetch(`/api/v1/invoices/${invoice.id}/mark-paid`, {
+      const res = await fetch(apiUrl(`/api/v1/invoices/${invoice.id}/mark-paid`), {
         method: "POST",
         headers: authHeaders,
         body: formData,
