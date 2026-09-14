@@ -7,12 +7,16 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Eye, Trash2, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle, DollarSign, Loader2, ShieldCheck } from "lucide-react";
+import { Eye, Trash2, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle, DollarSign, Loader2, MoreVertical, CheckSquare, Square } from "lucide-react";
 import InvoiceDetailModal from "./InvoiceDetailModal";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -26,6 +30,8 @@ const statusStyles: Record<string, string> = {
   mismatch: "bg-red-100 text-red-800 border-red-200",
   processed: "bg-green-100 text-green-800 border-green-200",
   approved: "bg-blue-100 text-blue-800 border-blue-200",
+  queued_for_payment: "bg-indigo-100 text-indigo-800 border-indigo-200",
+  payment_processing: "bg-cyan-100 text-cyan-800 border-cyan-200",
   paid: "bg-purple-100 text-purple-800 border-purple-200",
   flagged: "bg-yellow-100 text-yellow-800 border-yellow-200",
   duplicate: "bg-yellow-100 text-yellow-800 border-yellow-200",
@@ -33,7 +39,7 @@ const statusStyles: Record<string, string> = {
   pending: "bg-amber-100 text-amber-800 border-amber-200",
 };
 
-const STATUSES = ["All", "queued", "extracted", "pending_match", "pending_review", "mismatch", "approved", "processed", "paid", "flagged", "duplicate", "failed", "pending"];
+const STATUSES = ["All", "queued", "extracted", "pending_match", "pending_review", "mismatch", "approved", "queued_for_payment", "payment_processing", "processed", "paid", "flagged", "duplicate", "failed", "pending"];
 
 function displayDate(s: string | null): string {
   if (!s) return "—";
@@ -64,6 +70,10 @@ export default function InvoiceTable({ refreshKey, pendingFiles = [], onFilesSet
   const [selectedInvoice, setSelectedInvoice] = useState<Tables<"invoices"> | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [deleteInvoice, setDeleteInvoice] = useState<Tables<"invoices"> | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectMode, setSelectMode] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkActing, setBulkActing] = useState(false);
 
   const fetchInvoices = useCallback(async () => {
     if (!currentOrg) return;
@@ -124,6 +134,105 @@ export default function InvoiceTable({ refreshKey, pendingFiles = [], onFilesSet
   }, [invoices, pendingFiles]);
 
   useEffect(() => { setPage(0); }, [statusFilter]);
+
+  useEffect(() => { setSelectedIds(new Set()); setSelectMode(false); }, [page, statusFilter, refreshKey]);
+
+  const toggleSelectOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const enterSelectModeWith = (id: string) => {
+    setSelectMode(true);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => setSelectedIds(new Set(invoices.map((inv) => inv.id)));
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+    setSelectMode(false);
+  };
+  const toggleSelectAllCheckbox = () => {
+    if (selectedIds.size === invoices.length) clearSelection();
+    else selectAll();
+  };
+
+  const handleBulkApprove = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    const targets = invoices.filter((inv) => selectedIds.has(inv.id));
+
+    setBulkActing(true);
+    const { error } = await supabase.from("invoices").update({ status: "approved" }).in("id", ids);
+    setBulkActing(false);
+
+    if (error) {
+      toast.error("Failed to approve selected invoices");
+      return;
+    }
+
+    await supabase.from("invoice_audit_log").insert(
+      targets.map((inv) => ({
+        org_id: inv.org_id,
+        invoice_id: inv.id,
+        invoice_number: inv.invoice_number ?? null,
+        vendor_name: inv.vendor_name ?? null,
+        event: "APPROVED",
+        status: "approved",
+        total_amount: inv.total_amount ?? null,
+        currency: inv.currency ?? "PKR",
+        source: "manual",
+        processed_at: new Date().toISOString(),
+      }))
+    );
+
+    toast.success(`${ids.length} invoice${ids.length > 1 ? "s" : ""} approved`);
+    setInvoices((prev) => prev.map((i) => (selectedIds.has(i.id) ? { ...i, status: "approved" } : i)));
+    clearSelection();
+  };
+
+  const handleBulkDelete = async () => {
+    if (!currentOrg) return;
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    const targets = invoices.filter((inv) => selectedIds.has(inv.id));
+
+    setBulkActing(true);
+    const { error } = await supabase.from("invoices").delete().in("id", ids);
+    setBulkActing(false);
+    setBulkDeleteOpen(false);
+
+    if (error) {
+      toast.error("Failed to delete selected invoices");
+      return;
+    }
+
+    toast.success(`${ids.length} invoice${ids.length > 1 ? "s" : ""} deleted`);
+    setInvoices((prev) => prev.filter((inv) => !selectedIds.has(inv.id)));
+    setTotal((prev) => Math.max(0, prev - ids.length));
+    clearSelection();
+
+    for (const inv of targets) {
+      try {
+        const rawInvoiceNumber = inv.invoice_number ?? inv.file_name ?? "";
+        const match = rawInvoiceNumber.match(/(\d+)(?:\.pdf)?$/i);
+        const invoiceNumberToSend = match ? match[1] : rawInvoiceNumber;
+        await supabase.functions.invoke<DeleteWebhookResult>("delete-invoice-webhook", {
+          body: { invoice_number: invoiceNumberToSend, org_id: currentOrg.id },
+        });
+      } catch {
+        // best-effort external notification; invoice is already deleted
+      }
+    }
+  };
 
   const handleStatusUpdate = async (inv: Tables<"invoices">, newStatus: string) => {
     const { error } = await supabase
@@ -220,20 +329,61 @@ export default function InvoiceTable({ refreshKey, pendingFiles = [], onFilesSet
             </p>
           ) : (
             <>
+              {selectedIds.size > 0 && (
+                <div className="mb-3 flex items-center justify-between rounded-md border bg-muted/40 px-3 py-2">
+                  <span className="text-sm font-medium">
+                    {selectedIds.size} invoice{selectedIds.size > 1 ? "s" : ""} selected
+                  </span>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" disabled={bulkActing || selectedIds.size === invoices.length} onClick={selectAll}>
+                      <CheckSquare className="mr-1.5 h-4 w-4" />
+                      Select All
+                    </Button>
+                    <Button size="sm" variant="outline" disabled={bulkActing} onClick={handleBulkApprove}>
+                      <CheckCircle className="mr-1.5 h-4 w-4 text-blue-600" />
+                      Approve Selected
+                    </Button>
+                    <Button size="sm" variant="destructive" disabled={bulkActing} onClick={() => setBulkDeleteOpen(true)}>
+                      <Trash2 className="mr-1.5 h-4 w-4" />
+                      Delete Selected
+                    </Button>
+                    <Button size="sm" variant="ghost" disabled={bulkActing} onClick={clearSelection}>
+                      <Square className="mr-1.5 h-4 w-4" />
+                      Deselect All
+                    </Button>
+                  </div>
+                </div>
+              )}
               <Table>
                 <TableHeader>
                   <TableRow>
+                    {selectMode && (
+                      <TableHead className="w-10">
+                        <Checkbox
+                          checked={
+                            invoices.length > 0 && selectedIds.size === invoices.length
+                              ? true
+                              : selectedIds.size > 0
+                              ? "indeterminate"
+                              : false
+                          }
+                          onCheckedChange={toggleSelectAllCheckbox}
+                          aria-label="Select all invoices"
+                        />
+                      </TableHead>
+                    )}
                     <TableHead>File / Invoice</TableHead>
                     <TableHead>Vendor</TableHead>
                     <TableHead>Amount</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Uploaded</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead className="sticky right-0 z-10 border-l bg-card text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {pendingFiles.map((fileName) => (
                     <TableRow key={`pending-${fileName}`} className="bg-primary/5">
+                      {selectMode && <TableCell />}
                       <TableCell className="max-w-[200px] font-medium">
                         <div className="flex items-center gap-2">
                           <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
@@ -248,14 +398,24 @@ export default function InvoiceTable({ refreshKey, pendingFiles = [], onFilesSet
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">just now</TableCell>
-                      <TableCell />
+                      <TableCell className="sticky right-0 border-l bg-primary/5" />
                     </TableRow>
                   ))}
                   {invoices.map((inv) => {
                     const displayName = inv.source_file_name ?? inv.file_name ?? "Unknown";
                     const isDuplicate = inv.status === "duplicate" || inv.status === "flagged";
+                    const isSelected = selectedIds.has(inv.id);
                     return (
-                      <TableRow key={inv.id}>
+                      <TableRow key={inv.id} data-state={isSelected ? "selected" : undefined}>
+                        {selectMode && (
+                          <TableCell>
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={() => toggleSelectOne(inv.id)}
+                              aria-label={`Select invoice ${inv.invoice_number ?? displayName}`}
+                            />
+                          </TableCell>
+                        )}
                         <TableCell className="max-w-[200px] font-medium">
                           <div className="flex items-center gap-2">
                             <span className="truncate">{displayName}</span>
@@ -284,20 +444,10 @@ export default function InvoiceTable({ refreshKey, pendingFiles = [], onFilesSet
                           </Badge>
                         </TableCell>
                         <TableCell>{displayDate(inv.uploaded_at ?? inv.created_at)}</TableCell>
-                        <TableCell className="text-right">
+                        <TableCell
+                          className={`sticky right-0 border-l text-right ${isSelected ? "bg-muted" : "bg-card"}`}
+                        >
                           <div className="flex justify-end gap-1">
-                            {inv.status === "pending_review" && (
-                              <Button variant="ghost" size="icon" title="Approve"
-                                onClick={() => handleStatusUpdate(inv, "approved")}>
-                                <CheckCircle className="h-4 w-4 text-blue-600" />
-                              </Button>
-                            )}
-                            {(inv.status === "mismatch" || inv.status === "pending") && (
-                              <Button variant="ghost" size="icon" title="Approve Override"
-                                onClick={() => handleStatusUpdate(inv, "approved")}>
-                                <ShieldCheck className="h-4 w-4 text-orange-600" />
-                              </Button>
-                            )}
                             {inv.status === "approved" && (
                               <Button variant="ghost" size="icon" title="Mark as Paid"
                                 onClick={() => handleStatusUpdate(inv, "paid")}>
@@ -312,6 +462,36 @@ export default function InvoiceTable({ refreshKey, pendingFiles = [], onFilesSet
                               onClick={() => setDeleteInvoice(inv)}>
                               <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className={isSelected ? "bg-primary/10" : ""}>
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => (selectMode ? toggleSelectOne(inv.id) : enterSelectModeWith(inv.id))}>
+                                  {isSelected ? (
+                                    <>
+                                      <CheckSquare className="mr-2 h-4 w-4" />
+                                      Deselect
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Square className="mr-2 h-4 w-4" />
+                                      Select
+                                    </>
+                                  )}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleStatusUpdate(inv, "approved")}>
+                                  <CheckCircle className="mr-2 h-4 w-4 text-blue-600" />
+                                  Approve
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => setDeleteInvoice(inv)} className="text-destructive focus:text-destructive">
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -358,6 +538,21 @@ export default function InvoiceTable({ refreshKey, pendingFiles = [], onFilesSet
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedIds.size} Invoice{selectedIds.size > 1 ? "s" : ""}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedIds.size} selected invoice{selectedIds.size > 1 ? "s" : ""}? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBulkDelete}>Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

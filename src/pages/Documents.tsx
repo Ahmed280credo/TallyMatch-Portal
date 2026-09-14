@@ -15,10 +15,29 @@ import {
 } from "@/components/ui/table";
 import { Loader2, Plus, FileText, X, CheckCircle2, Upload, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import type { Tables } from "@/integrations/supabase/types";
+import type { Tables, Json } from "@/integrations/supabase/types";
 
 type PurchaseOrder = Tables<"purchase_orders">;
 type GoodsReceiptNote = Tables<"goods_receipt_notes">;
+
+// Matching only compares quantity between a GRN and the invoice (line-item by
+// line-item) — total_received_amount is stored for reference/reporting but is
+// never checked against anything. Sum the line items' quantities so the list
+// below can show what's actually verified, instead of implying amount matters.
+function sumGrnQuantity(lineItems: Json | null): number | null {
+  if (!Array.isArray(lineItems) || lineItems.length === 0) return null;
+  let total = 0;
+  let found = false;
+  for (const item of lineItems) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const qty = (item as Record<string, unknown>).quantity;
+    if (typeof qty === "number" && Number.isFinite(qty)) {
+      total += qty;
+      found = true;
+    }
+  }
+  return found ? total : null;
+}
 
 interface ImportResult {
   success: boolean;
@@ -29,6 +48,7 @@ interface ImportResult {
 
 const EMPTY_PO = { po_number: "", vendor_name: "", total_amount: "", currency: "PKR" };
 const EMPTY_GRN = { grn_number: "", po_number: "", vendor_name: "", total_received_amount: "", received_at: "" };
+const EMPTY_GRN_ITEM = { description: "", quantity: "" };
 
 async function uploadFileToStorage(file: File, orgId: string): Promise<string | null> {
   const path = `${orgId}/${Date.now()}_${file.name}`;
@@ -79,6 +99,7 @@ export default function Documents() {
 
   const [poForm, setPoForm] = useState(EMPTY_PO);
   const [grnForm, setGrnForm] = useState(EMPTY_GRN);
+  const [grnItems, setGrnItems] = useState([{ ...EMPTY_GRN_ITEM }]);
   const [poFile, setPoFile] = useState<File | null>(null);
   const [grnFile, setGrnFile] = useState<File | null>(null);
   const [submittingPo, setSubmittingPo] = useState(false);
@@ -118,6 +139,18 @@ export default function Documents() {
     if (!currentOrg) return;
     const { data } = await supabase.from("purchase_orders").select("*").eq("org_id", currentOrg.id).order("created_at", { ascending: false });
     if (data) setPos(data as PurchaseOrder[]);
+  }
+
+  function addGrnItem() {
+    setGrnItems((items) => [...items, { ...EMPTY_GRN_ITEM }]);
+  }
+
+  function updateGrnItem(index: number, field: "description" | "quantity", value: string) {
+    setGrnItems((items) => items.map((item, i) => (i === index ? { ...item, [field]: value } : item)));
+  }
+
+  function removeGrnItem(index: number) {
+    setGrnItems((items) => (items.length > 1 ? items.filter((_, i) => i !== index) : items));
   }
 
   async function refreshGrns() {
@@ -175,12 +208,24 @@ export default function Documents() {
         fileName = grnFile.name;
         if (!fileUrl) toast({ title: "File upload failed", description: "Record saved without PDF.", variant: "destructive" });
       }
+      // Only rows with a description count — quantity matching looks up each
+      // invoice line item by description (or SKU, which manual entry has no
+      // field for), so a description-less row can never be matched anyway.
+      const lineItems = grnItems
+        .filter((item) => item.description.trim())
+        .map((item) => ({
+          description: item.description.trim(),
+          quantity: item.quantity.trim() ? parseFloat(item.quantity) : null,
+          unit_price: null,
+          amount: 0,
+        }));
       const { data, error } = await supabase.from("goods_receipt_notes").insert({
         org_id: currentOrg.id,
         grn_number: grnForm.grn_number.trim(),
         po_number: grnForm.po_number.trim() || null,
         vendor_name: grnForm.vendor_name.trim() || null,
         total_received_amount: grnForm.total_received_amount ? parseFloat(grnForm.total_received_amount) : null,
+        line_items: lineItems.length > 0 ? lineItems : null,
         received_at: grnForm.received_at || null,
         file_url: fileUrl,
         file_name: fileName,
@@ -189,6 +234,7 @@ export default function Documents() {
       if (error) throw new Error(error.message);
       setGrns((prev) => [data as GoodsReceiptNote, ...prev]);
       setGrnForm(EMPTY_GRN);
+      setGrnItems([{ ...EMPTY_GRN_ITEM }]);
       setGrnFile(null);
       if (grnFileRef.current) grnFileRef.current.value = "";
       toast({ title: "GRN saved", description: `GRN ${data.grn_number} added.` });
@@ -331,16 +377,27 @@ export default function Documents() {
               {/* CSV import */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Upload className="h-4 w-4" />
-                    Import POs from CSV
+                  <CardTitle className="flex items-center justify-between gap-2 text-base">
+                    <span className="flex items-center gap-2">
+                      <Upload className="h-4 w-4" />
+                      Import POs from CSV
+                    </span>
+                    <a
+                      href="/samples/po-csv-field-guide.pdf"
+                      download
+                      className="inline-flex items-center gap-1 text-xs font-normal text-primary underline underline-offset-2"
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      Download field guide (PDF)
+                    </a>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <p className="text-xs text-muted-foreground">
-                    Required columns: <code className="bg-muted px-1 rounded">Purchase Order No</code>, <code className="bg-muted px-1 rounded">Supplier Name</code>, <code className="bg-muted px-1 rounded">Net Amount</code>.
-                    Optional: <code className="bg-muted px-1 rounded">Order Date</code>, <code className="bg-muted px-1 rounded">Item Description</code>, <code className="bg-muted px-1 rounded">Quantity</code>, <code className="bg-muted px-1 rounded">Unit Price</code>.
+                    Required (column names can vary, e.g. "PO Number" or "PO No" both work): PO Number, Vendor/Supplier Name, Total/Net Amount.
+                    Optional: Order Date, Item Description, Quantity, Unit Price.
                     Multiple rows with the same PO number are grouped into one record with line items.
+                    Not sure? Download the field guide above — required fields are highlighted.
                   </p>
                   <div className="flex items-center gap-3 flex-wrap">
                     <Input
@@ -447,15 +504,53 @@ export default function Documents() {
                         onChange={(e) => setGrnForm((f) => ({ ...f, vendor_name: e.target.value }))} />
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="grn-amount">Total Received Amount</Label>
+                      <Label htmlFor="grn-amount">Total Received Amount (reference only)</Label>
                       <Input id="grn-amount" type="number" min="0" step="0.01" placeholder="0.00" value={grnForm.total_received_amount}
                         onChange={(e) => setGrnForm((f) => ({ ...f, total_received_amount: e.target.value }))} />
+                      <p className="text-xs text-muted-foreground">Not used in matching — quantity (below) is checked per line item instead.</p>
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="grn-date">Date Received</Label>
                       <Input id="grn-date" type="date" value={grnForm.received_at}
                         onChange={(e) => setGrnForm((f) => ({ ...f, received_at: e.target.value }))} />
                     </div>
+
+                    <div className="space-y-2 sm:col-span-2 lg:col-span-3">
+                      <Label>Line Items (for quantity matching)</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Description must match the corresponding line on the invoice (case/whitespace-insensitive) for the quantity check to compare against it. Rows with no description are ignored.
+                      </p>
+                      <div className="space-y-2">
+                        {grnItems.map((item, index) => (
+                          <div key={index} className="flex items-center gap-2">
+                            <Input
+                              placeholder="Item description, e.g. Steel Rods 12mm"
+                              value={item.description}
+                              onChange={(e) => updateGrnItem(index, "description", e.target.value)}
+                              className="flex-1"
+                            />
+                            <Input
+                              type="number" min="0" step="1" placeholder="Qty"
+                              value={item.quantity}
+                              onChange={(e) => updateGrnItem(index, "quantity", e.target.value)}
+                              className="w-28"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeGrnItem(index)}
+                              disabled={grnItems.length === 1}
+                              className="text-muted-foreground hover:text-destructive disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <Button type="button" variant="outline" size="sm" onClick={addGrnItem}>
+                        <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Item
+                      </Button>
+                    </div>
+
                     <div className="space-y-1.5">
                       <Label htmlFor="grn-file">PDF Attachment (optional)</Label>
                       <div className="flex items-center gap-2">
@@ -480,16 +575,27 @@ export default function Documents() {
               {/* CSV import */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Upload className="h-4 w-4" />
-                    Import GRNs from CSV
+                  <CardTitle className="flex items-center justify-between gap-2 text-base">
+                    <span className="flex items-center gap-2">
+                      <Upload className="h-4 w-4" />
+                      Import GRNs from CSV
+                    </span>
+                    <a
+                      href="/samples/grn-csv-field-guide.pdf"
+                      download
+                      className="inline-flex items-center gap-1 text-xs font-normal text-primary underline underline-offset-2"
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      Download field guide (PDF)
+                    </a>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <p className="text-xs text-muted-foreground">
-                    Required columns: <code className="bg-muted px-1 rounded">GRN No</code>, <code className="bg-muted px-1 rounded">Supplier Name</code>.
-                    Optional: <code className="bg-muted px-1 rounded">PO Reference</code>, <code className="bg-muted px-1 rounded">Received Date</code>, <code className="bg-muted px-1 rounded">Item Description</code>, <code className="bg-muted px-1 rounded">Quantity Received</code>.
+                    Required (column names can vary, e.g. "GRN No" or "GRN Number" both work): GRN Number, Vendor/Supplier Name.
+                    Optional: PO Reference, Total/Received Amount, Received Date, Item Description, Quantity Received.
                     Multiple rows with the same GRN number are grouped into one record with line items.
+                    Not sure? Download the field guide above — required fields are highlighted.
                   </p>
                   <div className="flex items-center gap-3 flex-wrap">
                     <Input
@@ -516,6 +622,9 @@ export default function Documents() {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Uploaded Goods Receipt Notes</CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    3-way matching checks <span className="font-medium text-foreground">quantity</span> against the invoice, line item by line item — the amount below is kept for reference only and isn't compared to anything.
+                  </p>
                 </CardHeader>
                 <CardContent>
                   {!currentOrg ? (
@@ -533,7 +642,8 @@ export default function Documents() {
                           <TableHead>GRN Number</TableHead>
                           <TableHead>Linked PO</TableHead>
                           <TableHead>Vendor</TableHead>
-                          <TableHead>Amount Received</TableHead>
+                          <TableHead>Qty Received</TableHead>
+                          <TableHead className="text-muted-foreground">Amount (reference only)</TableHead>
                           <TableHead>Received At</TableHead>
                           <TableHead>File</TableHead>
                           <TableHead>Added</TableHead>
@@ -545,7 +655,8 @@ export default function Documents() {
                             <TableCell className="font-semibold">{grn.grn_number}</TableCell>
                             <TableCell>{grn.po_number ?? "—"}</TableCell>
                             <TableCell>{grn.vendor_name ?? "—"}</TableCell>
-                            <TableCell>{grn.total_received_amount != null ? grn.total_received_amount.toLocaleString() : "—"}</TableCell>
+                            <TableCell className="font-medium">{sumGrnQuantity(grn.line_items) ?? "—"}</TableCell>
+                            <TableCell className="text-muted-foreground">{grn.total_received_amount != null ? grn.total_received_amount.toLocaleString() : "—"}</TableCell>
                             <TableCell>{grn.received_at ? new Date(grn.received_at).toLocaleDateString() : "—"}</TableCell>
                             <TableCell>
                               {grn.file_url ? (

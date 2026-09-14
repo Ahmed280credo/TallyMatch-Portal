@@ -40,6 +40,8 @@ const statusStyles: Record<string, string> = {
   pending: "bg-amber-100 text-amber-800 border-amber-200",
   processed: "bg-green-100 text-green-800 border-green-200",
   approved: "bg-blue-100 text-blue-800 border-blue-200",
+  queued_for_payment: "bg-indigo-100 text-indigo-800 border-indigo-200",
+  payment_processing: "bg-cyan-100 text-cyan-800 border-cyan-200",
   paid: "bg-purple-100 text-purple-800 border-purple-200",
   flagged: "bg-yellow-100 text-yellow-800 border-yellow-200",
   duplicate: "bg-yellow-100 text-yellow-800 border-yellow-200",

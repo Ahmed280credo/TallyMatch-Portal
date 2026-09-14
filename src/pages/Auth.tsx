@@ -60,7 +60,6 @@ const Auth = () => {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <img src="/tallymatch-icon-final.png" alt="TallyMatch" className="mx-auto mb-2 h-16 w-16 rounded-xl object-contain" />
           <CardTitle className="text-2xl">TallyMatch</CardTitle>
           <CardDescription>
             {isLogin ? "Sign in to your account" : "Create a new account"}

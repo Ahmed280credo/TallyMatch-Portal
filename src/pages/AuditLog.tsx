@@ -29,6 +29,7 @@ const eventStyles: Record<string, string> = {
   PROCESSED: "bg-green-100 text-green-800 border-green-200",
   DUPLICATE_DETECTED: "bg-yellow-100 text-yellow-800 border-yellow-200",
   EXTRACTION_FAILED: "bg-red-100 text-red-800 border-red-200",
+  DELETED: "bg-red-100 text-red-800 border-red-200",
   status_change: "bg-blue-50 text-blue-700 border-blue-200",
 };
 
@@ -36,6 +37,8 @@ const statusStyles: Record<string, string> = {
   processed: "bg-green-100 text-green-800 border-green-200",
   success: "bg-green-100 text-green-800 border-green-200",
   approved: "bg-blue-100 text-blue-800 border-blue-200",
+  queued_for_payment: "bg-indigo-100 text-indigo-800 border-indigo-200",
+  payment_processing: "bg-cyan-100 text-cyan-800 border-cyan-200",
   paid: "bg-purple-100 text-purple-800 border-purple-200",
   mismatch: "bg-red-100 text-red-800 border-red-200",
   failed: "bg-red-100 text-red-800 border-red-200",
@@ -53,8 +56,11 @@ const timelineDotMap: Record<string, string> = {
   PROCESSED: "bg-green-500",
   DUPLICATE_DETECTED: "bg-yellow-500",
   EXTRACTION_FAILED: "bg-red-500",
+  DELETED: "bg-red-600",
   status_change_paid: "bg-purple-500",
   status_change_approved: "bg-blue-500",
+  status_change_queued_for_payment: "bg-indigo-500",
+  status_change_payment_processing: "bg-cyan-500",
   status_change_mismatch: "bg-red-400",
   status_change_pending: "bg-amber-400",
   status_change_pending_match: "bg-orange-400",

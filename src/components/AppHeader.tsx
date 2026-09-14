@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useCurrentOrg } from "@/hooks/useCurrentOrg";
 import { Button } from "@/components/ui/button";
-import { LogOut, ScrollText, LayoutDashboard, FolderOpen } from "lucide-react";
+import { LogOut, ScrollText, LayoutDashboard, FolderOpen, Wallet } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -29,7 +29,6 @@ export default function AppHeader() {
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <img src="/tallymatch-icon-final.png" alt="TallyMatch" className="h-11 w-11 rounded-xl object-contain" />
             <h1 className="text-xl font-bold text-foreground">TallyMatch</h1>
           </div>
           <nav className="flex items-center gap-1">
@@ -44,6 +43,10 @@ export default function AppHeader() {
             <NavLink to="/documents" className={navLinkClass}>
               <FolderOpen className="h-4 w-4" />
               Documents
+            </NavLink>
+            <NavLink to="/payment-queue" className={navLinkClass}>
+              <Wallet className="h-4 w-4" />
+              Payment Queue
             </NavLink>
           </nav>
         </div>

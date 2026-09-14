@@ -62,7 +62,7 @@ const Index = () => {
             </aside>
 
             {/* The Main Content (Table) */}
-            <section>
+            <section className="min-w-0">
               <InvoiceTable
                 refreshKey={refreshKey}
                 pendingFiles={pendingFiles}
