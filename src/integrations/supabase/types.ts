@@ -92,6 +92,14 @@ export type Database = {
           match_status: string | null
           match_result: Json | null
           source_file_name: string | null
+          erp_type: string | null
+          erp_push_status: string
+          erp_doc_entry: number | null
+          erp_doc_num: number | null
+          erp_push_error: string | null
+          erp_pushed_at: string | null
+          payment_source: string | null
+          erp_last_synced_at: string | null
         }
         Insert: {
           id?: string
@@ -119,6 +127,14 @@ export type Database = {
           match_status?: string | null
           match_result?: Json | null
           source_file_name?: string | null
+          erp_type?: string | null
+          erp_push_status?: string
+          erp_doc_entry?: number | null
+          erp_doc_num?: number | null
+          erp_push_error?: string | null
+          erp_pushed_at?: string | null
+          payment_source?: string | null
+          erp_last_synced_at?: string | null
         }
         Update: {
           id?: string
@@ -146,6 +162,14 @@ export type Database = {
           match_status?: string | null
           match_result?: Json | null
           source_file_name?: string | null
+          erp_type?: string | null
+          erp_push_status?: string
+          erp_doc_entry?: number | null
+          erp_doc_num?: number | null
+          erp_push_error?: string | null
+          erp_pushed_at?: string | null
+          payment_source?: string | null
+          erp_last_synced_at?: string | null
         }
         Relationships: []
       }
@@ -244,6 +268,10 @@ export type Database = {
           file_url: string | null
           file_name: string | null
           uploaded_by: string | null
+          source: string
+          erp_type: string | null
+          erp_doc_entry: number | null
+          erp_doc_num: number | null
           created_at: string
         }
         Insert: {
@@ -257,6 +285,10 @@ export type Database = {
           file_url?: string | null
           file_name?: string | null
           uploaded_by?: string | null
+          source?: string
+          erp_type?: string | null
+          erp_doc_entry?: number | null
+          erp_doc_num?: number | null
           created_at?: string
         }
         Update: {
@@ -270,6 +302,10 @@ export type Database = {
           file_url?: string | null
           file_name?: string | null
           uploaded_by?: string | null
+          source?: string
+          erp_type?: string | null
+          erp_doc_entry?: number | null
+          erp_doc_num?: number | null
           created_at?: string
         }
         Relationships: []
@@ -287,6 +323,10 @@ export type Database = {
           file_url: string | null
           file_name: string | null
           uploaded_by: string | null
+          source: string
+          erp_type: string | null
+          erp_doc_entry: number | null
+          erp_doc_num: number | null
           created_at: string
         }
         Insert: {
@@ -301,6 +341,10 @@ export type Database = {
           file_url?: string | null
           file_name?: string | null
           uploaded_by?: string | null
+          source?: string
+          erp_type?: string | null
+          erp_doc_entry?: number | null
+          erp_doc_num?: number | null
           created_at?: string
         }
         Update: {
@@ -315,6 +359,10 @@ export type Database = {
           file_url?: string | null
           file_name?: string | null
           uploaded_by?: string | null
+          source?: string
+          erp_type?: string | null
+          erp_doc_entry?: number | null
+          erp_doc_num?: number | null
           created_at?: string
         }
         Relationships: []

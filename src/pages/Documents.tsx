@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Loader2, Plus, FileText, X, CheckCircle2, Upload, AlertCircle } from "lucide-react";
+import { Loader2, Plus, FileText, X, CheckCircle2, Upload, AlertCircle, RefreshCw, Cloud } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Tables, Json } from "@/integrations/supabase/types";
 
@@ -57,6 +57,23 @@ async function uploadFileToStorage(file: File, orgId: string): Promise<string | 
   if (error) return null;
   const { data } = supabase.storage.from("documents").getPublicUrl(path);
   return data.publicUrl;
+}
+
+// Multiple import paths write into the same purchase_orders/goods_receipt_notes
+// tables (manual entry, CSV import, ERP sync) — this badge shows which one a
+// given record came from.
+function SourceBadge({ source }: { source: string | null | undefined }) {
+  if (source === "erp_sync") {
+    return (
+      <Badge variant="outline" className="gap-1 border-indigo-200 bg-indigo-100 text-indigo-800">
+        <Cloud className="h-3 w-3" /> SAP B1
+      </Badge>
+    );
+  }
+  if (source === "csv_import") {
+    return <Badge variant="outline" className="border-sky-200 bg-sky-100 text-sky-800">CSV Import</Badge>;
+  }
+  return <Badge variant="outline" className="border-slate-200 bg-slate-100 text-slate-700">Manual</Badge>;
 }
 
 function ImportResultBanner({ result }: { result: ImportResult }) {
@@ -112,6 +129,7 @@ export default function Documents() {
   const [importingGrn, setImportingGrn] = useState(false);
   const [poImportResult, setPoImportResult] = useState<ImportResult | null>(null);
   const [grnImportResult, setGrnImportResult] = useState<ImportResult | null>(null);
+  const [syncingErp, setSyncingErp] = useState(false);
 
   const poFileRef = useRef<HTMLInputElement>(null);
   const grnFileRef = useRef<HTMLInputElement>(null);
@@ -158,6 +176,32 @@ export default function Documents() {
     if (!currentOrg) return;
     const { data } = await supabase.from("goods_receipt_notes").select("*").eq("org_id", currentOrg.id).order("created_at", { ascending: false });
     if (data) setGrns(data as GoodsReceiptNote[]);
+  }
+
+  async function handleSyncErp() {
+    if (!currentOrg || !session?.access_token) return;
+    setSyncingErp(true);
+    try {
+      const res = await fetch(apiUrl("/api/v1/integrations/erp/sync"), {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}`, "x-org-id": currentOrg.id },
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast({ title: "ERP sync failed", description: body?.message, variant: "destructive" });
+        return;
+      }
+      toast({
+        title: "Synced from ERP",
+        description: `${body.purchase_orders_synced} PO${body.purchase_orders_synced === 1 ? "" : "s"}, ${body.purchase_delivery_notes_synced} GRN${body.purchase_delivery_notes_synced === 1 ? "" : "s"}`,
+      });
+      refreshPos();
+      refreshGrns();
+    } catch {
+      toast({ title: "Cannot reach backend server", variant: "destructive" });
+    } finally {
+      setSyncingErp(false);
+    }
   }
 
   async function handlePoSubmit(e: React.FormEvent) {
@@ -423,8 +467,12 @@ export default function Documents() {
 
               {/* List */}
               <Card>
-                <CardHeader>
+                <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
                   <CardTitle className="text-base">Uploaded Purchase Orders</CardTitle>
+                  <Button type="button" variant="outline" size="sm" onClick={handleSyncErp} disabled={syncingErp}>
+                    {syncingErp ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+                    Sync from ERP
+                  </Button>
                 </CardHeader>
                 <CardContent>
                   {!currentOrg ? (
@@ -443,6 +491,7 @@ export default function Documents() {
                           <TableHead>Vendor</TableHead>
                           <TableHead>Amount</TableHead>
                           <TableHead>Currency</TableHead>
+                          <TableHead>Source</TableHead>
                           <TableHead>File</TableHead>
                           <TableHead>Added</TableHead>
                         </TableRow>
@@ -454,6 +503,7 @@ export default function Documents() {
                             <TableCell>{po.vendor_name ?? "—"}</TableCell>
                             <TableCell>{po.total_amount != null ? po.total_amount.toLocaleString() : "—"}</TableCell>
                             <TableCell>{po.currency ?? "—"}</TableCell>
+                            <TableCell><SourceBadge source={po.source} /></TableCell>
                             <TableCell>
                               {po.file_url ? (
                                 <a href={po.file_url} target="_blank" rel="noopener noreferrer"
@@ -621,11 +671,17 @@ export default function Documents() {
 
               {/* List */}
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Uploaded Goods Receipt Notes</CardTitle>
-                  <p className="text-xs text-muted-foreground">
-                    3-way matching checks <span className="font-medium text-foreground">quantity</span> against the invoice, line item by line item — the amount below is kept for reference only and isn't compared to anything.
-                  </p>
+                <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+                  <div>
+                    <CardTitle className="text-base">Uploaded Goods Receipt Notes</CardTitle>
+                    <p className="text-xs text-muted-foreground">
+                      3-way matching checks <span className="font-medium text-foreground">quantity</span> against the invoice, line item by line item — the amount below is kept for reference only and isn't compared to anything.
+                    </p>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" onClick={handleSyncErp} disabled={syncingErp}>
+                    {syncingErp ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+                    Sync from ERP
+                  </Button>
                 </CardHeader>
                 <CardContent>
                   {!currentOrg ? (
@@ -645,6 +701,7 @@ export default function Documents() {
                           <TableHead>Vendor</TableHead>
                           <TableHead>Qty Received</TableHead>
                           <TableHead className="text-muted-foreground">Amount (reference only)</TableHead>
+                          <TableHead>Source</TableHead>
                           <TableHead>Received At</TableHead>
                           <TableHead>File</TableHead>
                           <TableHead>Added</TableHead>
@@ -658,6 +715,7 @@ export default function Documents() {
                             <TableCell>{grn.vendor_name ?? "—"}</TableCell>
                             <TableCell className="font-medium">{sumGrnQuantity(grn.line_items) ?? "—"}</TableCell>
                             <TableCell className="text-muted-foreground">{grn.total_received_amount != null ? grn.total_received_amount.toLocaleString() : "—"}</TableCell>
+                            <TableCell><SourceBadge source={grn.source} /></TableCell>
                             <TableCell>{grn.received_at ? new Date(grn.received_at).toLocaleDateString() : "—"}</TableCell>
                             <TableCell>
                               {grn.file_url ? (

@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useCurrentOrg } from "@/hooks/useCurrentOrg";
 import { Button } from "@/components/ui/button";
-import { LogOut, ScrollText, LayoutDashboard, FolderOpen, Wallet } from "lucide-react";
+import { LogOut, ScrollText, LayoutDashboard, FolderOpen, Wallet, Plug } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -47,6 +47,10 @@ export default function AppHeader() {
             <NavLink to="/payment-queue" className={navLinkClass}>
               <Wallet className="h-4 w-4" />
               Payment Queue
+            </NavLink>
+            <NavLink to="/settings/integrations" className={navLinkClass}>
+              <Plug className="h-4 w-4" />
+              Integrations
             </NavLink>
           </nav>
         </div>

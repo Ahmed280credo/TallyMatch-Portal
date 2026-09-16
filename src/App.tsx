@@ -8,6 +8,7 @@ import Auth from "./pages/Auth.tsx";
 import AuditLog from "./pages/AuditLog.tsx";
 import Documents from "./pages/Documents.tsx";
 import PaymentQueue from "./pages/PaymentQueue.tsx";
+import Settings from "./pages/Settings.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -24,6 +25,7 @@ const App = () => (
           <Route path="/audit-log" element={<AuditLog />} />
           <Route path="/documents" element={<Documents />} />
           <Route path="/payment-queue" element={<PaymentQueue />} />
+          <Route path="/settings/integrations" element={<Settings />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

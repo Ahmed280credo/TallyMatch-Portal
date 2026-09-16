@@ -1,13 +1,15 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentOrg } from "@/hooks/useCurrentOrg";
+import { useAuth } from "@/hooks/useAuth";
+import { apiUrl } from "@/lib/api";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Eye, Trash2, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle, DollarSign, Loader2, MoreVertical, CheckSquare, Square } from "lucide-react";
+import { Eye, Trash2, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle, DollarSign, Loader2, MoreVertical, CheckSquare, Square, Cloud, CloudOff, RefreshCw } from "lucide-react";
 import InvoiceDetailModal from "./InvoiceDetailModal";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -41,6 +43,32 @@ const statusStyles: Record<string, string> = {
 
 const STATUSES = ["All", "queued", "extracted", "pending_match", "pending_review", "mismatch", "approved", "queued_for_payment", "payment_processing", "processed", "paid", "flagged", "duplicate", "failed", "pending"];
 
+// "ERP" is generic on purpose — erp_type ("sap_b1" today) drives the label,
+// so a second ERP later doesn't need a new badge variant.
+function ErpPushBadge({ invoice }: { invoice: Tables<"invoices"> }) {
+  const label = invoice.erp_type === "sap_b1" ? "SAP B1" : (invoice.erp_type ?? "ERP");
+
+  if (invoice.erp_push_status === "pushed") {
+    return (
+      <Badge variant="outline" className="gap-1 border-indigo-200 bg-indigo-50 text-indigo-700 text-[10px]">
+        <Cloud className="h-3 w-3" /> {label} #{invoice.erp_doc_num}
+      </Badge>
+    );
+  }
+  if (invoice.erp_push_status === "failed") {
+    return (
+      <Badge
+        variant="outline"
+        className="gap-1 border-red-200 bg-red-50 text-red-700 text-[10px] max-w-[180px] truncate"
+        title={invoice.erp_push_error ?? undefined}
+      >
+        <CloudOff className="h-3 w-3 shrink-0" /> Push failed
+      </Badge>
+    );
+  }
+  return null;
+}
+
 function displayDate(s: string | null): string {
   if (!s) return "—";
   return new Date(s).toLocaleDateString();
@@ -59,6 +87,7 @@ interface DeleteWebhookResult {
 
 export default function InvoiceTable({ refreshKey, pendingFiles = [], onFilesSettled }: InvoiceTableProps) {
   const { currentOrg } = useCurrentOrg();
+  const { session } = useAuth();
   const onFilesSettledRef = useRef(onFilesSettled);
   useEffect(() => { onFilesSettledRef.current = onFilesSettled; }, [onFilesSettled]);
 
@@ -74,6 +103,7 @@ export default function InvoiceTable({ refreshKey, pendingFiles = [], onFilesSet
   const [selectMode, setSelectMode] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkActing, setBulkActing] = useState(false);
+  const [erpActingId, setErpActingId] = useState<string | null>(null);
 
   const fetchInvoices = useCallback(async () => {
     if (!currentOrg) return;
@@ -265,6 +295,57 @@ export default function InvoiceTable({ refreshKey, pendingFiles = [], onFilesSet
     }
   };
 
+  const erpAuthHeaders = (): Record<string, string> => {
+    if (!session?.access_token || !currentOrg) return {};
+    return { Authorization: `Bearer ${session.access_token}`, "x-org-id": currentOrg.id };
+  };
+
+  const handlePushToErp = async (inv: Tables<"invoices">) => {
+    setErpActingId(inv.id);
+    try {
+      const res = await fetch(apiUrl(`/api/v1/invoices/${inv.id}/push-to-erp`), {
+        method: "POST",
+        headers: erpAuthHeaders(),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // The connector's actual error.code/error.message is surfaced here,
+        // never a generic failure — the row's badge will also show it.
+        toast.error(body?.message ?? "Push to SAP B1 failed");
+      } else {
+        toast.success(`Pushed to SAP B1 as DocNum ${body.erp_doc_num}`);
+      }
+      setInvoices((prev) => prev.map((i) => (i.id === inv.id ? { ...i, ...body } : i)));
+      if (selectedInvoice?.id === inv.id) setSelectedInvoice((prev) => (prev ? { ...prev, ...body } : prev));
+    } catch {
+      toast.error("Network error while pushing to SAP B1");
+    } finally {
+      setErpActingId(null);
+    }
+  };
+
+  const handleSyncErpPayment = async (inv: Tables<"invoices">) => {
+    setErpActingId(inv.id);
+    try {
+      const res = await fetch(apiUrl(`/api/v1/invoices/${inv.id}/sync-erp-payment-status`), {
+        method: "POST",
+        headers: erpAuthHeaders(),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(body?.message ?? "Failed to sync payment status");
+      } else {
+        toast.success(body.status === "paid" ? "Marked paid via SAP B1 sync" : "Still unpaid in SAP B1");
+      }
+      setInvoices((prev) => prev.map((i) => (i.id === inv.id ? { ...i, ...body } : i)));
+      if (selectedInvoice?.id === inv.id) setSelectedInvoice((prev) => (prev ? { ...prev, ...body } : prev));
+    } catch {
+      toast.error("Network error while syncing payment status");
+    } finally {
+      setErpActingId(null);
+    }
+  };
+
   const handleDelete = async () => {
     if (!deleteInvoice || !currentOrg) return;
     const { error } = await supabase.from("invoices").delete().eq("id", deleteInvoice.id);
@@ -439,9 +520,14 @@ export default function InvoiceTable({ refreshKey, pendingFiles = [], onFilesSet
                             : "—"}
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className={`capitalize ${statusStyles[inv.status] ?? ""}`}>
-                            {inv.status}
-                          </Badge>
+                          <div className="flex flex-col items-start gap-1">
+                            <Badge variant="outline" className={`capitalize ${statusStyles[inv.status] ?? ""}`}>
+                              {inv.status === "paid"
+                                ? inv.payment_source === "erp_sync" ? "Paid (SAP B1)" : "Paid (Manual)"
+                                : inv.status}
+                            </Badge>
+                            <ErpPushBadge invoice={inv} />
+                          </div>
                         </TableCell>
                         <TableCell>{displayDate(inv.uploaded_at ?? inv.created_at)}</TableCell>
                         <TableCell
@@ -486,6 +572,22 @@ export default function InvoiceTable({ refreshKey, pendingFiles = [], onFilesSet
                                   <CheckCircle className="mr-2 h-4 w-4 text-blue-600" />
                                   Approve
                                 </DropdownMenuItem>
+                                {(inv.erp_push_status === "not_pushed" || inv.erp_push_status === "failed") && (
+                                  <DropdownMenuItem disabled={erpActingId === inv.id} onClick={() => handlePushToErp(inv)}>
+                                    {erpActingId === inv.id
+                                      ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                      : <Cloud className="mr-2 h-4 w-4 text-indigo-600" />}
+                                    {inv.erp_push_status === "failed" ? "Retry Push to SAP B1" : "Push to SAP B1"}
+                                  </DropdownMenuItem>
+                                )}
+                                {inv.erp_push_status === "pushed" && inv.status !== "paid" && (
+                                  <DropdownMenuItem disabled={erpActingId === inv.id} onClick={() => handleSyncErpPayment(inv)}>
+                                    {erpActingId === inv.id
+                                      ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                      : <RefreshCw className="mr-2 h-4 w-4 text-indigo-600" />}
+                                    Sync Payment Status
+                                  </DropdownMenuItem>
+                                )}
                                 <DropdownMenuItem onClick={() => setDeleteInvoice(inv)} className="text-destructive focus:text-destructive">
                                   <Trash2 className="mr-2 h-4 w-4" />
                                   Delete
@@ -525,6 +627,9 @@ export default function InvoiceTable({ refreshKey, pendingFiles = [], onFilesSet
         open={modalOpen}
         onOpenChange={setModalOpen}
         onStatusUpdate={handleStatusUpdate}
+        onPushToErp={handlePushToErp}
+        onSyncErpPayment={handleSyncErpPayment}
+        erpActing={selectedInvoice != null && erpActingId === selectedInvoice.id}
       />
 
       <AlertDialog open={!!deleteInvoice} onOpenChange={(open) => { if (!open) setDeleteInvoice(null); }}>

@@ -4,7 +4,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { CheckCircle, DollarSign, AlertTriangle, ShieldCheck, Clock } from "lucide-react";
+import { CheckCircle, DollarSign, AlertTriangle, ShieldCheck, Clock, Cloud, CloudOff, RefreshCw, Loader2 } from "lucide-react";
 import type { Tables, Json } from "@/integrations/supabase/types";
 
 interface Props {
@@ -12,6 +12,9 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onStatusUpdate?: (inv: Tables<"invoices">, newStatus: string) => void;
+  onPushToErp?: (inv: Tables<"invoices">) => void;
+  onSyncErpPayment?: (inv: Tables<"invoices">) => void;
+  erpActing?: boolean;
 }
 
 function formatFileSize(bytes: number | null): string {
@@ -74,7 +77,9 @@ function getMatchDetails(matchResult: Json | null): { mismatch: string[]; pendin
   return { mismatch, pending };
 }
 
-export default function InvoiceDetailModal({ invoice, open, onOpenChange, onStatusUpdate }: Props) {
+export default function InvoiceDetailModal({
+  invoice, open, onOpenChange, onStatusUpdate, onPushToErp, onSyncErpPayment, erpActing,
+}: Props) {
   if (!invoice) return null;
 
   const { mismatch: mismatchReasons, pending: pendingReasons } = getMatchDetails(invoice.match_result);
@@ -87,7 +92,9 @@ export default function InvoiceDetailModal({ invoice, open, onOpenChange, onStat
           <DialogTitle className="flex items-center gap-2">
             Invoice Details
             <Badge variant="outline" className={`text-xs capitalize ${statusStyles[invoice.status] ?? ""}`}>
-              {invoice.status}
+              {invoice.status === "paid"
+                ? invoice.payment_source === "erp_sync" ? "Paid (SAP B1)" : "Paid (Manual)"
+                : invoice.status}
             </Badge>
           </DialogTitle>
         </DialogHeader>
@@ -185,6 +192,69 @@ export default function InvoiceDetailModal({ invoice, open, onOpenChange, onStat
             <Field label="Uploaded" value={formatDate(invoice.uploaded_at ?? invoice.created_at)} />
             {invoice.updated_at && <Field label="Updated" value={formatDate(invoice.updated_at)} />}
           </div>
+
+          <Separator />
+
+          {/* ERP push / payment sync — "ERP" stays generic (erp_type drives the
+              label) so a second ERP later doesn't need new UI. */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">ERP Push Status</p>
+              <Badge variant="outline" className={`text-xs gap-1 ${
+                invoice.erp_push_status === "pushed"
+                  ? "border-indigo-200 bg-indigo-100 text-indigo-800"
+                  : invoice.erp_push_status === "failed"
+                  ? "border-red-200 bg-red-100 text-red-800"
+                  : "border-slate-200 bg-slate-100 text-slate-700"
+              }`}>
+                {invoice.erp_push_status === "pushed" && <Cloud className="h-3 w-3" />}
+                {invoice.erp_push_status === "failed" && <CloudOff className="h-3 w-3" />}
+                {invoice.erp_push_status === "pushed" ? "Pushed" : invoice.erp_push_status === "failed" ? "Push Failed" : "Not Pushed"}
+              </Badge>
+            </div>
+            {invoice.erp_push_status === "pushed" && (
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="ERP DocEntry" value={invoice.erp_doc_entry} />
+                <Field label="ERP DocNum" value={invoice.erp_doc_num} />
+              </div>
+            )}
+            {invoice.erp_push_status === "failed" && invoice.erp_push_error && (
+              <div className="flex items-start gap-1.5 rounded-md border border-red-100 bg-red-50 p-2 text-xs text-red-800">
+                <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                {invoice.erp_push_error}
+              </div>
+            )}
+            {invoice.erp_last_synced_at && (
+              <Field label="Payment last synced" value={formatDate(invoice.erp_last_synced_at)} />
+            )}
+          </div>
+
+          {(onPushToErp || onSyncErpPayment) && (
+            <div className="flex gap-2">
+              {(invoice.erp_push_status === "not_pushed" || invoice.erp_push_status === "failed") && onPushToErp && (
+                <Button
+                  variant="outline"
+                  className="flex-1 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                  disabled={erpActing}
+                  onClick={() => onPushToErp(invoice)}
+                >
+                  {erpActing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Cloud className="mr-2 h-4 w-4" />}
+                  {invoice.erp_push_status === "failed" ? "Retry Push" : "Push to SAP B1"}
+                </Button>
+              )}
+              {invoice.erp_push_status === "pushed" && invoice.status !== "paid" && onSyncErpPayment && (
+                <Button
+                  variant="outline"
+                  className="flex-1 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                  disabled={erpActing}
+                  onClick={() => onSyncErpPayment(invoice)}
+                >
+                  {erpActing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                  Sync Payment Status
+                </Button>
+              )}
+            </div>
+          )}
 
           {onStatusUpdate && (
             <div className="flex gap-2 pt-2 border-t">
