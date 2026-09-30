@@ -1,0 +1,97 @@
+-- ============================================================
+-- Migration: Bundle extraction v2 (Phase 1 — input model + Gemini extraction)
+-- Run in Supabase SQL Editor:
+-- https://supabase.com/dashboard/project/tkdvpaoiidgugpvgqowe/sql/new
+-- All changes here are additive and nullable (or have safe defaults) —
+-- no backfill required, existing rows and the existing single-PDF /
+-- CSV-import pipelines are unaffected until extraction_v2_enabled is
+-- turned on for an org.
+-- ============================================================
+
+-- 1. Per-org feature flag. Defaults to false so nothing changes for any
+--    existing org until explicitly opted in.
+ALTER TABLE public.organizations ADD COLUMN IF NOT EXISTS extraction_v2_enabled boolean NOT NULL DEFAULT false;
+
+-- 2. Bundle: one row per multi-document upload (invoice + PO copy + delivery
+--    note/GRN sheet, in any order, as a single PDF). Holds page classification
+--    and extraction provenance (prompt version, model, raw response) for audit,
+--    plus a file-hash cache key so a re-uploaded/duplicate bundle doesn't
+--    re-spend Gemini calls.
+CREATE TABLE IF NOT EXISTS public.bundles (
+  id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id              uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  source_file_name    text,
+  file_hash           text NOT NULL,
+  page_count          integer,
+  page_classification jsonb,
+  -- 'erp': org has a connected ERP, so SAP-sourced PO/GRN wins on conflict.
+  -- 'paper_only': no live connector — the bundle itself is the source of truth.
+  extraction_mode     text NOT NULL DEFAULT 'paper_only' CHECK (extraction_mode IN ('erp', 'paper_only')),
+  prompt_version      text,
+  model_name          text,
+  raw_gemini_response jsonb,
+  created_at          timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (org_id, file_hash)
+);
+ALTER TABLE public.bundles ENABLE ROW LEVEL SECURITY;
+CREATE INDEX IF NOT EXISTS bundles_org_id_idx ON public.bundles (org_id);
+
+DROP POLICY IF EXISTS "Org members can view bundles" ON public.bundles;
+CREATE POLICY "Org members can view bundles"
+  ON public.bundles FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.organization_members
+      WHERE organization_members.org_id = bundles.org_id
+        AND organization_members.user_id = auth.uid()
+    )
+  );
+
+-- 3. Invoices: link to the bundle they came from (null for single-PDF/CSV
+--    invoices), the full per-field extraction audit trail, and structured
+--    findings. mismatch_reasons/pending_reasons (inside the existing
+--    match_result jsonb) stay populated from finding messages so the
+--    frontend needs no change yet — see ThreeWayMatchingService, unchanged
+--    in this phase, and the new bridging logic in BundleExtractionService.
+ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS bundle_id uuid REFERENCES public.bundles(id) ON DELETE SET NULL;
+ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS extraction_metadata jsonb;
+ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS findings jsonb NOT NULL DEFAULT '[]'::jsonb;
+
+-- 4. purchase_orders / goods_receipt_notes: 'bundle_extracted' is a new,
+--    lowest-trust source (precedence erp_sync > manual/csv_import >
+--    bundle_extracted — see BundleAssemblyService). bundle_id/invoice_id tag
+--    which upload and which specific invoice within it produced the row;
+--    is_superseded is schema-only in this phase — no code sets it yet, since
+--    "supersede a bundle row once ERP sync later brings the same document"
+--    touches erp-connections sync, out of scope for this phase.
+ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS bundle_id uuid REFERENCES public.bundles(id) ON DELETE SET NULL;
+ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS invoice_id uuid REFERENCES public.invoices(id) ON DELETE SET NULL;
+ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS is_superseded boolean NOT NULL DEFAULT false;
+ALTER TABLE public.purchase_orders DROP CONSTRAINT IF EXISTS purchase_orders_source_check;
+ALTER TABLE public.purchase_orders ADD CONSTRAINT purchase_orders_source_check
+  CHECK (source IN ('manual', 'csv_import', 'erp_sync', 'bundle_extracted'));
+
+ALTER TABLE public.goods_receipt_notes ADD COLUMN IF NOT EXISTS bundle_id uuid REFERENCES public.bundles(id) ON DELETE SET NULL;
+ALTER TABLE public.goods_receipt_notes ADD COLUMN IF NOT EXISTS invoice_id uuid REFERENCES public.invoices(id) ON DELETE SET NULL;
+ALTER TABLE public.goods_receipt_notes ADD COLUMN IF NOT EXISTS is_superseded boolean NOT NULL DEFAULT false;
+ALTER TABLE public.goods_receipt_notes DROP CONSTRAINT IF EXISTS goods_receipt_notes_source_check;
+ALTER TABLE public.goods_receipt_notes ADD CONSTRAINT goods_receipt_notes_source_check
+  CHECK (source IN ('manual', 'csv_import', 'erp_sync', 'bundle_extracted'));
+
+-- 5. Duplicate detection was org+invoice_number only (invoices_org_invoice_number_unique),
+--    which would reject two different vendors legitimately sharing an invoice
+--    number (e.g. both using "INV-001"). Widen to org+invoice_number+vendor_name
+--    — this only makes the constraint MORE permissive, so no existing row can
+--    violate it. App-level dedup (findInvoiceByNumber, now vendor-scoped) does
+--    the case-insensitive vendor matching; this index is a race-condition
+--    safety net, not the primary check.
+DROP INDEX IF EXISTS public.invoices_org_invoice_number_unique;
+CREATE UNIQUE INDEX IF NOT EXISTS invoices_org_vendor_invoice_number_unique
+  ON public.invoices (org_id, vendor_name, invoice_number)
+  WHERE invoice_number IS NOT NULL AND vendor_name IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS invoices_bundle_id_idx ON public.invoices (bundle_id);
+CREATE INDEX IF NOT EXISTS purchase_orders_bundle_id_idx ON public.purchase_orders (bundle_id);
+CREATE INDEX IF NOT EXISTS goods_receipt_notes_bundle_id_idx ON public.goods_receipt_notes (bundle_id);
+
+NOTIFY pgrst, 'reload schema';
